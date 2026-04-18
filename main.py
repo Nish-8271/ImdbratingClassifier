@@ -14,27 +14,21 @@ reverse_word_index={value:key for key,value in word_index.items()}
 # Load the preTrained model with reLU activation function
 from tensorflow.keras.layers import InputLayer
 
-def fix_input_layer(config):
-    if 'batch_input_shape' in config:
-        config['batch_shape'] = config.pop('batch_input_shape')
-    if 'batch_shape' in config:
-        # If the current Keras version doesn't like batch_shape, we can try to fix it
-        # However, usually the issue is the other way around. 
-        # For Keras 3, InputLayer expects 'shape' (without batch dim) OR 'batch_shape'.
-        # But if it errors on 'batch_shape', we might need to pop it.
-        pass
-    return InputLayer.from_config(config)
-
-model = load_model('imdb_review_rnn.h5', custom_objects={'InputLayer': InputLayer})
-# Sometimes simply passing InputLayer back as a custom object fixes deserialization 
-# if the namespace was the issue. But if it's the batch_shape argument:
-try:
-    model = load_model('imdb_review_rnn.h5')
-except Exception as e:
-    if "batch_shape" in str(e):
-        model = load_model('imdb_review_rnn.h5', custom_objects={'InputLayer': lambda **kwargs: InputLayer(**{k: v for k, v in kwargs.items() if k != 'batch_shape'})})
-    else:
+# Define a robust loading function that handles the 'batch_shape' issue across Keras versions
+def safe_load_model(model_path):
+    try:
+        # Try standard loading first
+        return load_model(model_path)
+    except Exception as e:
+        if "batch_shape" in str(e):
+            # If batch_shape error occurs, provide a custom InputLayer that ignores it
+            def fixed_input_layer(**kwargs):
+                kwargs.pop('batch_shape', None)
+                return InputLayer(**kwargs)
+            return load_model(model_path, custom_objects={'InputLayer': fixed_input_layer})
         raise e
+
+model = safe_load_model('imdb_review_rnn.h5')
 
 # Step 2: Helper Functions
 # Functions to decode reviews back to text
