@@ -12,7 +12,29 @@ word_index=imdb.get_word_index()
 reverse_word_index={value:key for key,value in word_index.items()}
 
 # Load the preTrained model with reLU activation function
-model=load_model('imdb_review_rnn.h5')
+from tensorflow.keras.layers import InputLayer
+
+def fix_input_layer(config):
+    if 'batch_input_shape' in config:
+        config['batch_shape'] = config.pop('batch_input_shape')
+    if 'batch_shape' in config:
+        # If the current Keras version doesn't like batch_shape, we can try to fix it
+        # However, usually the issue is the other way around. 
+        # For Keras 3, InputLayer expects 'shape' (without batch dim) OR 'batch_shape'.
+        # But if it errors on 'batch_shape', we might need to pop it.
+        pass
+    return InputLayer.from_config(config)
+
+model = load_model('imdb_review_rnn.h5', custom_objects={'InputLayer': InputLayer})
+# Sometimes simply passing InputLayer back as a custom object fixes deserialization 
+# if the namespace was the issue. But if it's the batch_shape argument:
+try:
+    model = load_model('imdb_review_rnn.h5')
+except Exception as e:
+    if "batch_shape" in str(e):
+        model = load_model('imdb_review_rnn.h5', custom_objects={'InputLayer': lambda **kwargs: InputLayer(**{k: v for k, v in kwargs.items() if k != 'batch_shape'})})
+    else:
+        raise e
 
 # Step 2: Helper Functions
 # Functions to decode reviews back to text
